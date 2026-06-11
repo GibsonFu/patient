@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>醫師平均用量查詢系統</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="data.js"></script>
+<style>
+  :root {
+    --primary: #1a5276;
+    --primary-light: #2980b9;
+    --bg: #f4f6f8;
+    --border: #d5dbdb;
+    --accent: #e8f4fd;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Microsoft JhengHei", "PingFang TC", sans-serif;
+    background: var(--bg);
+    color: #2c3e50;
+  }
+  /* ---------- 登入頁 ---------- */
+  #login-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .login-card {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.12);
+    padding: 48px 56px;
+    text-align: center;
+    max-width: 420px;
+  }
+  .login-card h1 { color: var(--primary); font-size: 1.5rem; margin-bottom: 8px; }
+  .login-card p.sub { color: #7f8c8d; font-size: .9rem; margin-bottom: 28px; }
+  #gsi-button { display: flex; justify-content: center; margin-bottom: 16px; }
+  .login-note { font-size: .78rem; color: #95a5a6; }
+  .login-error {
+    margin-top: 16px; padding: 10px 14px; border-radius: 8px;
+    background: #fdecea; color: #c0392b; font-size: .85rem; display: none;
+  }
+  .demo-box {
+    margin-top: 24px; padding-top: 20px; border-top: 1px dashed var(--border);
+  }
+  .demo-box .warn {
+    font-size: .75rem; color: #e67e22; margin-bottom: 10px;
+  }
+  .demo-box select, .demo-box button {
+    font-size: .85rem; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border);
+  }
+  .demo-box button { background: var(--primary-light); color: #fff; border: none; cursor: pointer; margin-left: 6px; }
+
+  /* ---------- 主畫面 ---------- */
+  #app { display: none; }
+  header {
+    background: var(--primary); color: #fff;
+    padding: 14px 28px;
+    display: flex; align-items: center; justify-content: space-between;
+    flex-wrap: wrap; gap: 8px;
+  }
+  header h1 { font-size: 1.15rem; }
+  .user-info { display: flex; align-items: center; gap: 14px; font-size: .85rem; }
+  .user-info .scope {
+    background: rgba(255,255,255,.18); padding: 3px 10px; border-radius: 12px;
+  }
+  .user-info button {
+    background: transparent; border: 1px solid rgba(255,255,255,.6); color: #fff;
+    padding: 5px 14px; border-radius: 6px; cursor: pointer; font-size: .82rem;
+  }
+  .user-info button:hover { background: rgba(255,255,255,.15); }
+  main { padding: 24px 28px; max-width: 1280px; margin: 0 auto; }
+  .toolbar {
+    display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .toolbar label { font-size: .88rem; color: #566573; }
+  .toolbar select, .toolbar input {
+    padding: 7px 10px; border: 1px solid var(--border); border-radius: 6px; font-size: .88rem;
+    background: #fff;
+  }
+  .meta { font-size: .78rem; color: #85929e; margin-left: auto; }
+
+  table {
+    width: 100%; border-collapse: collapse; background: #fff;
+    border-radius: 10px; overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,.06);
+    font-size: .88rem;
+  }
+  thead th {
+    background: var(--primary); color: #fff; padding: 10px 12px;
+    text-align: left; font-weight: 600; white-space: nowrap;
+  }
+  thead th.num, td.num { text-align: right; }
+  tbody td { padding: 9px 12px; border-bottom: 1px solid #eef1f3; vertical-align: top; }
+  tbody tr:hover { background: var(--accent); }
+  td.rep-cell { white-space: nowrap; font-weight: 600; color: var(--primary); }
+  td.doctors { max-width: 320px; line-height: 1.7; }
+  .doc-tag {
+    display: inline-block; background: #eaf2f8; border-radius: 4px;
+    padding: 1px 7px; margin: 1px 3px 1px 0; font-size: .82rem;
+  }
+  .doc-count { color: #85929e; font-size: .78rem; }
+  .subqty { color: #85929e; font-size: .78rem; }
+  .patients-cell { font-weight: 700; color: #1e8449; }
+  .group-start td { border-top: 2px solid var(--primary-light); }
+  .empty-msg { padding: 40px; text-align: center; color: #95a5a6; }
+  footer { padding: 18px 28px 30px; font-size: .75rem; color: #95a5a6; max-width: 1280px; margin: 0 auto; }
+</style>
+</head>
+<body>
+
+<!-- ========== 登入頁 ========== -->
+<div id="login-screen">
+  <div class="login-card">
+    <h1>醫師平均用量查詢系統</h1>
+    <p class="sub">限 @ebp.com.tw 網域帳號登入</p>
+    <div id="gsi-button" style="display:none"></div>
+
+    <!-- 已註冊帳號：一鍵登入 -->
+    <div id="quick-login" style="display:none">
+      <button id="quick-btn" onclick="quickLogin()" style="display:flex;align-items:center;gap:14px;
+        width:100%;background:#fff;border:1px solid #dadce0;border-radius:12px;padding:14px 18px;
+        cursor:pointer;font-family:inherit;text-align:left;box-shadow:0 1px 3px rgba(0,0,0,.08);
+        margin-bottom:14px">
+        <span id="quick-avatar" style="width:40px;height:40px;border-radius:50%;background:#1a5276;
+          color:#fff;display:inline-flex;align-items:center;justify-content:center;
+          font-size:1.1rem;font-weight:700;flex-shrink:0"></span>
+        <span style="min-width:0">
+          <span id="quick-name" style="display:block;font-size:1rem;font-weight:600;color:#2c3e50"></span>
+          <span id="quick-email" style="display:block;font-size:.8rem;color:#7f8c8d"></span>
+        </span>
+      </button>
+      <a href="javascript:void(0)" onclick="useOtherAccount()" style="font-size:.82rem;color:#2980b9">使用其他帳號登入</a>
+    </div>
+
+    <!-- 首次使用：註冊 Google 帳號 -->
+    <div id="first-login">
+    <input type="email" id="login-email" placeholder="請輸入您的 Google 帳號（xxx@ebp.com.tw）"
+      style="width:100%;padding:11px 14px;border:1px solid #dadce0;border-radius:8px;
+      font-size:.95rem;font-family:inherit;margin-bottom:14px;text-align:center"
+      onkeydown="if(event.key==='Enter')gLogin()">
+    <button id="g-login-btn" onclick="gLogin()" style="display:inline-flex;align-items:center;gap:12px;
+      background:#fff;border:1px solid #dadce0;border-radius:24px;padding:10px 24px;cursor:pointer;
+      color:#3c4043;font-size:1rem;font-weight:500;font-family:inherit;
+      box-shadow:0 1px 3px rgba(0,0,0,.08);margin-bottom:16px">
+      <svg width="22" height="22" viewBox="0 0 48 48">
+        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+      </svg>使用 Google 帳戶登入
+    </button>
+    <p class="login-note">輸入公司 Google 帳號登入，系統依權限表顯示資料</p>
+    </div><!-- /first-login -->
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ========== 主畫面 ========== -->
+<div id="app">
+  <header>
+    <h1>醫師平均用量查詢系統｜Lote 100mg / Fute 5mg</h1>
+    <div class="user-info">
+      <span id="user-name"></span>
+      <span class="scope" id="user-scope"></span>
+      <button onclick="logout()">登出</button>
+    </div>
+  </header>
+  <main>
+    <div class="toolbar">
+      <label>業務代號：
+        <select id="filter-code"><option value="">全部可見</option></select>
+      </label>
+      <label>搜尋：
+        <input type="text" id="filter-text" placeholder="醫院 / 醫師姓名">
+      </label>
+      <span class="meta" id="data-meta"></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>業務代號 / 姓名</th>
+          <th>醫院</th>
+          <th>醫師<br><span style="font-weight:400;font-size:.75rem">(精神科｜主治/總醫師/科部主任)</span></th>
+          <th>產品</th>
+          <th class="num">1~5月 月平均業績數量</th>
+          <th class="num">病患數</th>
+          <th class="num">醫師平均處方病人數</th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+    <div class="empty-msg" id="empty-msg" style="display:none">無符合條件的資料</div>
+  </main>
+  <footer>
+    計算方式（各產品分列計算）：月平均業績數量 = 2026年1~5月業績數量加總 ÷ 5；病患數 = 月平均 ÷ 1.5 ÷ 28 無條件進位；醫師平均處方病人數 = 病患數 ÷ 醫師數。<br>
+    醫師名單來源：客戶清單明細表2（科別含「精神」，職稱限主治醫師 / 總醫師 / 部/科主任；名稱開頭為 XX 者不計）。
+  </footer>
+</div>
+
+<script>
+/* ================= 設定 =================
+   部署前請至 Google Cloud Console 建立 OAuth 2.0 用戶端 ID（網頁應用程式），
+   將「已授權的 JavaScript 來源」設為此網頁網址，並把 Client ID 填入下方。 */
+const CONFIG = {
+  // 方式一（建議）：填入 Apps Script 部署網址，G 按鈕點下去直接前往 Google 登入
+  APP_URL: "",            // 例如 "https://script.google.com/a/macros/ebp.com.tw/s/xxxx/exec"
+  // 方式二：填入 OAuth 用戶端 ID，在本頁內完成 Google 登入
+  GOOGLE_CLIENT_ID: "",   // 例如 "123456789-xxxx.apps.googleusercontent.com"
+  ALLOWED_DOMAIN: "ebp.com.tw",
+};
+
+let currentUser = null; // { email, name, codes: ["GM11"] | "ALL" }
+
+/* ============ Google 登入 ============ */
+window.addEventListener("load", () => {
+  const saved = sessionStorage.getItem("user");
+  if (saved) {
+    currentUser = JSON.parse(saved);
+    showApp();
+    return;
+  }
+  setupQuickLogin();
+  if (!CONFIG.GOOGLE_CLIENT_ID) return;
+  const timer = setInterval(() => {
+    if (window.google && google.accounts) {
+      clearInterval(timer);
+      google.accounts.id.initialize({
+        client_id: CONFIG.GOOGLE_CLIENT_ID,
+        hd: CONFIG.ALLOWED_DOMAIN,
+        callback: onGoogleCredential,
+      });
+      google.accounts.id.renderButton(
+        document.getElementById("gsi-button"),
+        { theme: "filled_blue", size: "large", text: "signin_with", locale: "zh_TW" }
+      );
+    }
+  }, 100);
+});
+
+/* G 按鈕登入：輸入 Google 帳號 → 檢查網域與權限表 → 進入
+   （若已設定 APP_URL 或 GOOGLE_CLIENT_ID，則改走正式 Google 密碼驗證）*/
+function gLogin() {
+  if (CONFIG.APP_URL) {
+    window.top.location.href = CONFIG.APP_URL;
+    return;
+  }
+  if (CONFIG.GOOGLE_CLIENT_ID) {
+    const btn = document.querySelector("#gsi-button div[role=button], #gsi-button iframe");
+    if (btn) { btn.click(); return; }
+  }
+  const email = document.getElementById("login-email").value.trim().toLowerCase();
+  if (!email) {
+    return showLoginError("請先輸入您的 Google 帳號");
+  }
+  if (!email.endsWith("@" + CONFIG.ALLOWED_DOMAIN)) {
+    return showLoginError("僅限 @" + CONFIG.ALLOWED_DOMAIN + " 網域帳號登入");
+  }
+  loginWithEmail(email);
+}
+
+function onGoogleCredential(response) {
+  const payload = JSON.parse(atob(response.credential.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+  const email = (payload.email || "").toLowerCase();
+  if (!payload.email_verified || !email.endsWith("@" + CONFIG.ALLOWED_DOMAIN)) {
+    return showLoginError("僅限 @" + CONFIG.ALLOWED_DOMAIN + " 網域帳號登入");
+  }
+  loginWithEmail(email);
+}
+
+function loginWithEmail(email) {
+  const perm = APP_DATA.permissions[email];
+  if (!perm) {
+    return showLoginError("此帳號（" + email + "）不在權限表中，請聯絡管理員");
+  }
+  currentUser = { email, name: perm.name, codes: perm.codes };
+  sessionStorage.setItem("user", JSON.stringify(currentUser));
+  localStorage.setItem("registeredEmail", email); // 註冊：之後一鍵登入
+  showApp();
+}
+
+/* ============ 一鍵登入（已註冊帳號） ============ */
+function setupQuickLogin() {
+  const email = localStorage.getItem("registeredEmail");
+  const perm = email ? APP_DATA.permissions[email] : null;
+  if (!perm) return; // 未註冊或帳號已被移出權限表 → 顯示輸入框
+  document.getElementById("quick-name").textContent = perm.name;
+  document.getElementById("quick-email").textContent = email;
+  document.getElementById("quick-avatar").textContent = perm.name.trim().charAt(0);
+  document.getElementById("quick-login").style.display = "block";
+  document.getElementById("first-login").style.display = "none";
+}
+
+function quickLogin() {
+  loginWithEmail(localStorage.getItem("registeredEmail"));
+}
+
+function useOtherAccount() {
+  document.getElementById("quick-login").style.display = "none";
+  document.getElementById("first-login").style.display = "block";
+  document.getElementById("login-email").focus();
+}
+
+function showLoginError(msg) {
+  const el = document.getElementById("login-error");
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+function logout() {
+  sessionStorage.removeItem("user");
+  currentUser = null;
+  if (window.google && google.accounts) google.accounts.id.disableAutoSelect();
+  location.reload();
+}
+
+/* ============ 主畫面 ============ */
+function visibleRows() {
+  if (currentUser.codes === "ALL") return APP_DATA.rows;
+  return APP_DATA.rows.filter(r => currentUser.codes.includes(r.code));
+}
+
+function showApp() {
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("app").style.display = "block";
+  document.getElementById("user-name").textContent = currentUser.name + "（" + currentUser.email + "）";
+  document.getElementById("user-scope").textContent =
+    "權限：" + (currentUser.codes === "ALL" ? "全部" : currentUser.codes.join(", "));
+  document.getElementById("data-meta").textContent =
+    "資料期間 " + APP_DATA.months + "｜更新於 " + APP_DATA.generatedAt;
+
+  const codes = [...new Set(visibleRows().map(r => r.code))].sort();
+  const sel = document.getElementById("filter-code");
+  codes.forEach(c => {
+    const row = APP_DATA.rows.find(r => r.code === c);
+    const opt = document.createElement("option");
+    opt.value = c;
+    opt.textContent = c + " " + row.rep;
+    sel.appendChild(opt);
+  });
+  sel.addEventListener("change", renderTable);
+  document.getElementById("filter-text").addEventListener("input", renderTable);
+  renderTable();
+}
+
+function fmt(n) { return n % 1 === 0 ? n.toLocaleString() : n.toLocaleString(undefined, {minimumFractionDigits:1, maximumFractionDigits:1}); }
+
+function renderTable() {
+  const codeFilter = document.getElementById("filter-code").value;
+  const text = document.getElementById("filter-text").value.trim();
+  let rows = visibleRows();
+  if (codeFilter) rows = rows.filter(r => r.code === codeFilter);
+  if (text) rows = rows.filter(r =>
+    r.hospital.includes(text) || r.doctors.some(d => d.includes(text)));
+
+  const tbody = document.getElementById("table-body");
+  tbody.innerHTML = "";
+  document.getElementById("empty-msg").style.display = rows.length ? "none" : "block";
+
+  let prevHosp = null;
+  rows.forEach(r => {
+    const tr = document.createElement("tr");
+    const hospKey = r.code + "|" + r.hospital;
+    if (prevHosp !== null && hospKey !== prevHosp) tr.classList.add("group-start");
+    prevHosp = hospKey;
+
+    const docsHtml = r.doctors.length
+      ? r.doctors.map(d => `<span class="doc-tag">${d}</span>`).join("") +
+        ` <span class="doc-count">共 ${r.doctors.length} 位</span>`
+      : `<span class="doc-count">— 無符合條件醫師</span>`;
+
+    tr.innerHTML = `
+      <td class="rep-cell">${r.code} ${r.rep}</td>
+      <td>${r.hospital}</td>
+      <td class="doctors">${docsHtml}</td>
+      <td style="white-space:nowrap"><b>${r.product}</b></td>
+      <td class="num">${fmt(r.avg)}</td>
+      <td class="num"><span class="patients-cell">${r.patients}</span></td>
+      <td class="num">${r.perDoctor !== null ? "<b>" + fmt(r.perDoctor) + "</b>" : "—"}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+</script>
+</body>
+</html>
