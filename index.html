@@ -437,13 +437,25 @@ async function submitRegistration() {
   try {
     const bin = await fetchBin() || { pending: [], approved: [] };
     const dup = [...(bin.pending||[]), ...(bin.approved||[])].find(x => x.email === email);
-    if (dup) return setErr("此 Email 已在申請或核准名單中");
-    if (APP_DATA.permissions[email]) return setErr("此帳號已存在，請直接登入或聯絡管理員");
+    if (dup) return setErr("此 Email 已在核准名單中，可直接登入（或申請中等待審核）");
     const h = await sha256(pwd);
-    (bin.pending = bin.pending||[]).push({ id: Date.now().toString(36), email, name, pwdHash: h, note, at: new Date().toISOString() });
-    await updateBin(bin);
-    closeRegisterModal();
-    showLoginError("✓ 申請已送出！管理員核准後即可登入", true);
+    const existing = APP_DATA.permissions[email];
+    if (existing) {
+      if (existing.pwdHash) return setErr("此帳號已設有密碼，請直接登入");
+      // 已在權限表但尚無密碼 → 免審核，直接寫入核准
+      (bin.approved = bin.approved||[]).push({
+        email, name: existing.name, codes: existing.codes, pwdHash: h, at: new Date().toISOString()
+      });
+      await updateBin(bin);
+      closeRegisterModal();
+      showLoginError("✓ 密碼設定完成！現在可以直接登入", true);
+    } else {
+      // 不在權限表 → 送申請等管理員審核
+      (bin.pending = bin.pending||[]).push({ id: Date.now().toString(36), email, name, pwdHash: h, note, at: new Date().toISOString() });
+      await updateBin(bin);
+      closeRegisterModal();
+      showLoginError("✓ 申請已送出！管理員核准後即可登入", true);
+    }
   } catch(e) { setErr("送出失敗：" + e.message); }
   finally { btn.disabled = false; btn.textContent = "送出申請"; }
 }
